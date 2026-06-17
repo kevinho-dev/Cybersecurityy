@@ -1,7 +1,8 @@
 <?php
-session_start();
+// Laad de centrale configuratie
+require_once 'config.php';
 
-// Redirect logged-in users away from registration
+// Als de gebruiker al ingelogd is, hoeft hij niet te registreren. Direct doorsturen naar index.php.
 if (isset($_SESSION['user_id'])) {
     header("Location: index.php");
     exit;
@@ -9,31 +10,37 @@ if (isset($_SESSION['user_id'])) {
 
 $error = $success = "";
 
+// Controleer of het registratieformulier is verstuurd
 if (isset($_POST['register'])) {
-    $conn = new PDO("mysql:host=localhost;dbname=cybersecurity", "root", "");
-    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
     $username = trim($_POST['username']);
     $password = $_POST['password'];
     $confirmPassword = $_POST['confirm_password'];
 
+    // Basisvalidaties op de ingevoerde gegevens
     if (empty($username) || empty($password)) {
         $error = "Vul alle velden in.";
     } elseif ($password !== $confirmPassword) {
         $error = "Wachtwoorden komen niet overeen.";
     } elseif (strlen($password) < 8) {
+        // Handhaaf een minimaal wachtwoordbeleid voor een betere weerstand tegen brute-force aanvallen
         $error = "Wachtwoord moet minimaal 8 tekens lang zijn.";
     } else {
-        // Check if username already exists
+        // Controleer met een Prepared Statement of de gebruikersnaam al in gebruik is
         $stmt = $conn->prepare("SELECT id FROM users WHERE username = ?");
         $stmt->execute([$username]);
+        
         if ($stmt->fetch()) {
             $error = "Deze gebruikersnaam is al bezet.";
         } else {
-            // Securely hash the password
+            /**
+             * VEILIGE WACHTWOORD OPSLAG
+             * Sla NOOIT wachtwoorden op in platte tekst of onveilige algoritmes zoals MD5/SHA1.
+             * PASSWORD_DEFAULT maakt gebruik van bcrypt, wat automatisch een unieke cryptografische 
+             * 'salt' toevoegt en computationeel zwaar is (vertraagt brute-force aanvallen).
+             */
             $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
-            // Insert new user
+            // Voeg de nieuwe gebruiker veilig toe aan de database
             $stmt = $conn->prepare("INSERT INTO users (username, password) VALUES (?, ?)");
             $stmt->execute([$username, $hashedPassword]);
 
