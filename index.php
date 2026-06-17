@@ -25,8 +25,9 @@ if(isset($_POST["submit"])) {
     else {
         $hash = hash_file("sha256", $file["tmp_name"]);
 
-        $stmt = $conn->prepare("SELECT share_token FROM uploads WHERE file_hash = ?");
-        $stmt->execute([$hash]);
+        // Now we also check if THIS specific user already uploaded this exact file
+        $stmt = $conn->prepare("SELECT share_token FROM uploads WHERE file_hash = ? AND user_id = ?");
+        $stmt->execute([$hash, $_SESSION['user_id']]);
         $existing = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if($existing) {
@@ -39,33 +40,73 @@ if(isset($_POST["submit"])) {
             $token = bin2hex(random_bytes(32));
             $hashedPassword = password_hash($_POST["password"], PASSWORD_DEFAULT);
             
-            $stmt = $conn->prepare("INSERT INTO uploads (share_token, original_name, stored_name, mime_type, file_hash, password) VALUES (?,?,?,?,?,?)");
-            $stmt->execute([$token, basename($file["name"]), $stored, $file["type"], $hash, $hashedPassword]);
+            // Added user_id to the INSERT query
+            $stmt = $conn->prepare("INSERT INTO uploads (user_id, share_token, original_name, stored_name, mime_type, file_hash, password) VALUES (?,?,?,?,?,?,?)");
+            $stmt->execute([$_SESSION['user_id'], $token, basename($file["name"]), $stored, $file["type"], $hash, $hashedPassword]);
 
             header("Location: ?link=" . $token);
             exit;
         }
     }
 }
+
+// Fetch all uploads for the currently logged-in user
+$stmt = $conn->prepare("SELECT original_name, share_token, uploaded_at FROM uploads WHERE user_id = ? ORDER BY uploaded_at DESC");
+$stmt->execute([$_SESSION['user_id']]);
+$myUploads = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
 ?>
 <!DOCTYPE html>
 <html lang="nl">
-<head><meta charset="UTF-8"><title>Upload</title></head>
+<head>
+    <meta charset="UTF-8">
+    <title>Upload & Dashboard</title>
+    <style>
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 10px; text-align: left; }
+        th { background-color: #f4f4f4; }
+    </style>
+</head>
 <body>
     <div style="text-align: right;">
         <a href="logout.php">Uitloggen</a>
     </div>
 
-    <h1>Upload</h1>
+    <h1>Upload Nieuw Bestand</h1>
     <form method="post" enctype="multipart/form-data">
         <input type="file" name="fileToUpload" accept="image/*">
         <input type="password" name="password" placeholder="Wachtwoord voor download" required>
         <input type="submit" value="Uploaden" name="submit">
     </form>
+
     <?php if($error): ?><p style="color:red"><?= htmlspecialchars($error) ?></p><?php endif; ?>
+    
     <?php if($shareLink): ?>
-        <p>Link: <a href="<?= $shareLink ?>"><?= $shareLink ?></a></p>
+        <p style="color:green; font-weight:bold;">Succes! Jouw link: <a href="<?= $shareLink ?>"><?= $shareLink ?></a></p>
         <script>history.replaceState(null, "", window.location.pathname);</script>
     <?php endif; ?>
+
+    <hr>
+
+    <h2>Mijn Geüploade Bestanden</h2>
+    <?php if(count($myUploads) > 0): ?>
+        <table>
+            <tr>
+                <th>Bestandsnaam</th>
+                <th>Deellink</th>
+                <th>Datum geüpload</th>
+            </tr>
+            <?php foreach($myUploads as $upload): ?>
+                <tr>
+                    <td><?= htmlspecialchars($upload['original_name']) ?></td>
+                    <td><a href="download.php?token=<?= htmlspecialchars($upload['share_token']) ?>" target="_blank">Open Link</a></td>
+                    <td><?= htmlspecialchars($upload['uploaded_at']) ?></td>
+                </tr>
+            <?php endforeach; ?>
+        </table>
+    <?php else: ?>
+        <p>Je hebt nog geen bestanden geüpload.</p>
+    <?php endif; ?>
+
 </body>
 </html>
