@@ -1,8 +1,7 @@
 <?php
-// Laad de centrale configuratie (sessies, databaseverbinding en security-headers)
-require_once 'config.php';
+session_start(); // Start de sessie om de inlogstatus te kunnen controleren
 
-// Als de gebruiker al is ingelogd, sturen we hem direct door naar het dashboard.
+// Als de gebruiker al is ingelogd, stuur hem direct door naar het dashboard
 if (isset($_SESSION['user_id'])) {
     header("Location: index.php");
     exit;
@@ -10,38 +9,30 @@ if (isset($_SESSION['user_id'])) {
 
 $error = "";
 
-// Controleer of het inlogformulier is verstuurd
 if (isset($_POST['login'])) {
-    // Verwijder onnodige spaties aan het begin en einde van de gebruikersnaam
+    // Verbinding maken met de database via PDO
+    $conn = new PDO("mysql:host=localhost;dbname=cybersecurity", "root", "");
+    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
     $username = trim($_POST['username']);
     $password = $_POST['password'];
 
-    // Gebruik een Prepared Statement om SQL-injectie te voorkomen
+    // Prepared statement om SQL-injection te voorkomen
     $stmt = $conn->prepare("SELECT id, password FROM users WHERE username = ?");
     $stmt->execute([$username]);
-    // Haal de resultaten op als een associatieve array
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // Controleer of de gebruiker bestaat en of het ingevoerde wachtwoord matcht met de bcrypt-hash
+    // Controleer of de gebruiker bestaat en het wachtwoord klopt met de opgeslagen hash
     if ($user && password_verify($password, $user['password'])) {
         
-        /**
-         * CROCIAAL VOOR CYBERSECURITY: SESSIE REGENERATIE
-         * Door de sessie-ID direct na een succesvolle login te vernieuwen, maken we 
-         * Session Fixation aanvallen onmogelijk. Een hacker kan nu niet meer een vooraf 
-         * gekaapte sessie-ID blijven gebruiken.
-         */
+        // REGEL 1: Vernieuw de sessie-ID na een succesvolle login.
+        // Dit vernietigt de oude ID en stopt Session Fixation aanvallen.
         session_regenerate_id(true);
 
-        // Sla het unieke gebruikers-ID op in de beveiligde server-side sessie
-        $_SESSION['user_id'] = $user['id'];
-        
-        // Stuur de gebruiker door naar de beveiligde index-pagina
+        $_SESSION['user_id'] = $user['id']; // Sla de user_id op in de beveiligde sessie
         header("Location: index.php");
         exit;
     } else {
-        // Beveiligingstip: Geef een generieke foutmelding. Vertel de aanvaller niet 
-        // of de gebruikersnaam of het wachtwoord fout was om 'user enumeration' te voorkomen.
         $error = "Ongeldige gebruikersnaam of wachtwoord.";
     }
 }
@@ -61,7 +52,5 @@ if (isset($_POST['login'])) {
         <input type="password" name="password" placeholder="Wachtwoord" required><br><br>
         <input type="submit" value="Inloggen" name="login">
     </form>
-    <br>
-    <p>Nog geen account? <a href="register.php">Registreer hier</a>.</p>
 </body>
 </html>
