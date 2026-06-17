@@ -1,0 +1,8 @@
+# Schakel de Apache Herschrijf-engine in
+RewriteEngine On
+
+# Controleer of de verbinding NIET via HTTPS verloopt
+RewriteCond %{HTTPS} off
+
+# Als de verbinding onveilig is, stuur de bezoeker dan met een permanente redirect (301) naar de HTTPS variant
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
