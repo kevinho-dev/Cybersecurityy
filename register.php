@@ -1,8 +1,9 @@
 <?php
-// Laad de centrale configuratie
+/**
+ * register.php — Secure registration with bcrypt
+ */
 require_once 'config.php';
 
-// Als de gebruiker al ingelogd is, hoeft hij niet te registreren. Direct doorsturen naar index.php.
 if (isset($_SESSION['user_id'])) {
     header("Location: index.php");
     exit;
@@ -10,63 +11,89 @@ if (isset($_SESSION['user_id'])) {
 
 $error = $success = "";
 
-// Controleer of het registratieformulier is verstuurd
 if (isset($_POST['register'])) {
-    $username = trim($_POST['username']);
-    $password = $_POST['password'];
+    $username        = trim($_POST['username']);
+    $password        = $_POST['password'];
     $confirmPassword = $_POST['confirm_password'];
 
-    // Basisvalidaties op de ingevoerde gegevens
+    // Validation
     if (empty($username) || empty($password)) {
-        $error = "Vul alle velden in.";
+        $error = "Fill all fields.";
     } elseif ($password !== $confirmPassword) {
-        $error = "Wachtwoorden komen niet overeen.";
+        $error = "Passwords don't match.";
     } elseif (strlen($password) < 8) {
-        // Handhaaf een minimaal wachtwoordbeleid voor een betere weerstand tegen brute-force aanvallen
-        $error = "Wachtwoord moet minimaal 8 tekens lang zijn.";
+        $error = "Password must be 8+ characters.";
     } else {
-        // Controleer met een Prepared Statement of de gebruikersnaam al in gebruik is
+        // Prepared Statement: prevents SQL injection + checks for duplicates
         $stmt = $conn->prepare("SELECT id FROM users WHERE username = ?");
         $stmt->execute([$username]);
-        
+
         if ($stmt->fetch()) {
-            $error = "Deze gebruikersnaam is al bezet.";
+            $error = "Username already taken.";
         } else {
-            /**
-             * VEILIGE WACHTWOORD OPSLAG
-             * Sla NOOIT wachtwoorden op in platte tekst of onveilige algoritmes zoals MD5/SHA1.
-             * PASSWORD_DEFAULT maakt gebruik van bcrypt, wat automatisch een unieke cryptografische 
-             * 'salt' toevoegt en computationeel zwaar is (vertraagt brute-force aanvallen).
-             */
+            // Bcrypt: auto-salts, computationally expensive (defeats brute-force)
             $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
-            // Voeg de nieuwe gebruiker veilig toe aan de database
+            // Insert via Prepared Statement
             $stmt = $conn->prepare("INSERT INTO users (username, password) VALUES (?, ?)");
             $stmt->execute([$username, $hashedPassword]);
 
-            $success = "Account succesvol aangemaakt! Je kunt nu inloggen.";
+            $success = "Account created! You can now login.";
         }
     }
 }
 ?>
 <!DOCTYPE html>
-<html lang="nl">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Registreren</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register — SecureShare</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>Registreren</h1>
-    <?php if ($error): ?><p style="color:red"><?= htmlspecialchars($error) ?></p><?php endif; ?>
-    <?php if ($success): ?><p style="color:green"><?= htmlspecialchars($success) ?></p><?php endif; ?>
-    
-    <form method="post">
-        <input type="text" name="username" placeholder="Gebruikersnaam" required><br><br>
-        <input type="password" name="password" placeholder="Wachtwoord (min. 8 tekens)" required><br><br>
-        <input type="password" name="confirm_password" placeholder="Wachtwoord herhalen" required><br><br>
-        <input type="submit" value="Registreren" name="register">
-    </form>
-    <br>
-    <p>Heb je al een account? <a href="login.php">Log hier in</a>.</p>
+
+<div class="auth-page">
+    <div class="card auth-card">
+        <div class="auth-header">
+            <div class="logo-mark">✦</div>
+            <h1>Create account</h1>
+            <p>Free secure file sharing</p>
+        </div>
+
+        <?php if ($error): ?>
+            <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+        <?php endif; ?>
+        <?php if ($success): ?>
+            <div class="alert alert-success"><?= htmlspecialchars($success) ?></div>
+        <?php endif; ?>
+
+        <form method="post">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" placeholder="Choose a username" value="<?= htmlspecialchars($_POST['username'] ?? '') ?>" required autocomplete="username">
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" placeholder="Min 8 characters" required autocomplete="new-password">
+            </div>
+
+            <div class="form-group">
+                <label for="confirm_password">Confirm password</label>
+                <input type="password" id="confirm_password" name="confirm_password" placeholder="Repeat password" required autocomplete="new-password">
+            </div>
+
+            <button type="submit" name="register" class="btn btn-primary btn-full">
+                Create account
+            </button>
+        </form>
+
+        <div class="auth-footer">
+            Already have an account? <a href="login.php">Login here</a>
+        </div>
+    </div>
+</div>
+
 </body>
 </html>

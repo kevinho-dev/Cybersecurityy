@@ -1,25 +1,29 @@
 <?php
-// Laad de centrale configuratie om de huidige sessie context te verkrijgen
+/**
+ * logout.php — Secure session destruction (3 steps)
+ */
 require_once 'config.php';
 
-// Stap 1: Maak de runtime sessie-array volledig leeg
+// Step 1: Clear runtime session array
 $_SESSION = [];
 
-// Stap 2: Vernietig de sessie-cookie in de browser van de gebruiker
+// Step 2: Delete session cookie from browser
 if (ini_get("session.use_cookies")) {
-    // Haal de huidige cookie-instellingen (zoals pad en domein) op zodat we de juiste cookie raken
     $params = session_get_cookie_params();
-    // Overschrijf de session-cookie en zet de verlooppediode ver in het verleden (time() - 42000)
-    setcookie(session_name(), '', time() - 42000,
-        $params["path"], $params["domain"],
-        $params["secure"], $params["httponly"]
+    setcookie(
+        session_name(),
+        '',
+        time() - 42000,  // Past date: browser deletes cookie
+        $params["path"],
+        $params["domain"],
+        $params["secure"],
+        $params["httponly"]
     );
 }
 
-// Stap 3: Vernietig de fysieke opslag van de sessiedata op de webserver zelf
+// Step 3: Destroy session on server (session_id becomes invalid)
 session_destroy();
 
-// Stap 4: Stuur de uitgelogde bezoeker terug naar het inlogscherm
 header("Location: login.php");
 exit;
 ?>

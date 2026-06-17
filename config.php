@@ -1,18 +1,18 @@
 <?php
-// Stap 2 Encryptie: .htaccess (HTTPS), password_hash (Bcrypt), SHA-256 (Bestanden).
+/**
+ * config.php — Central configuration & security
+ */
 
-// Sessie beveiligingsinstellingen (Session Hardening)
-ini_set('session.cookie_httponly', 1);
-ini_set('session.cookie_samesite', 'Lax');
-
-// Dwing secure cookies af als HTTPS actief is
+// Session hardening
+ini_set('session.cookie_httponly', 1);           // XSS: JS can't access cookie
+ini_set('session.cookie_samesite', 'Lax');       // CSRF: no cross-site cookies
 if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
-    ini_set('session.cookie_secure', 1);
+    ini_set('session.cookie_secure', 1);         // HTTPS only
 }
 
 session_start();
 
-// Bescherming tegen Session Hijacking (User-Agent controle)
+// Session hijacking protection: verify User-Agent
 if (isset($_SESSION['user_agent'])) {
     if ($_SESSION['user_agent'] !== $_SERVER['HTTP_USER_AGENT']) {
         session_unset();
@@ -25,11 +25,12 @@ if (isset($_SESSION['user_agent'])) {
     $_SESSION['user_agent'] = $_SERVER['HTTP_USER_AGENT'];
 }
 
-// Veilige database verbinding via PDO (SQL-injection preventie)
+// Database: PDO + Prepared Statements (SQL injection prevention)
 try {
     $conn = new PDO("mysql:host=localhost;dbname=cybersecurity", "root", "");
     $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 } catch (PDOException $e) {
-    // Toon een generieke foutmelding om informatie-lekkage te voorkomen
-    die("Er is een databasefout opgetreden. Probeer het later opnieuw.");
+    // Never expose DB errors to users (info leakage)
+    die("Database error. Try again later.");
 }
+?>
