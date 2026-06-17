@@ -2,6 +2,12 @@
 // Laad de centrale configuratie
 require_once 'config.php';
 
+// Toegangscontrole: alleen ingelogde gebruikers mogen downloaden
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit;
+}
+
 // Haal de token op uit de URL-balk (indien aanwezig)
 $token = $_GET["token"] ?? "";
 

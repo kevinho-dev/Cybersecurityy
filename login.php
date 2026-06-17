@@ -1,7 +1,6 @@
 <?php
-session_start(); // Start de sessie om de inlogstatus te kunnen controleren
+require_once 'config.php';
 
-// Als de gebruiker al is ingelogd, stuur hem direct door naar het dashboard
 if (isset($_SESSION['user_id'])) {
     header("Location: index.php");
     exit;
@@ -10,10 +9,6 @@ if (isset($_SESSION['user_id'])) {
 $error = "";
 
 if (isset($_POST['login'])) {
-    // Verbinding maken met de database via PDO
-    $conn = new PDO("mysql:host=localhost;dbname=cybersecurity", "root", "");
-    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
     $username = trim($_POST['username']);
     $password = $_POST['password'];
 

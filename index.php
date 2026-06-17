@@ -13,7 +13,7 @@ $shareLink = $error = "";
 // Als er een deellink is gegenereerd, bouwen we de URL op voor de gebruiker
 if(isset($_GET["link"])) {
     // htmlspecialchars voorkomt dat er malafide code in de link-variabele wordt geïnjecteerd
-    $shareLink = "http://localhost/cybersecurity/download.php?token=" . htmlspecialchars($_GET["link"]);
+    $shareLink = "https://" . $_SERVER['HTTP_HOST'] . "/download.php?token=" . htmlspecialchars($_GET["link"]);
 }
 
 // Verwerk het upload-formulier zodra de gebruiker op verzenden drukt
@@ -67,9 +67,13 @@ if(isset($_POST["submit"])) {
                 // Hash het download-wachtwoord veilig met bcrypt
                 $hashedPassword = password_hash($_POST["password"], PASSWORD_DEFAULT);
 
-                // Sla alle metadata en de relatie met de user_id veilig op in de database via een Prepared Statement
+                // Gebruik finfo om het echte MIME-type te bepalen (niet $_FILES["type"], die kan vervalst zijn)
+                $finfo = finfo_open(FILEINFO_MIME_TYPE);
+                $mimeType = finfo_file($finfo, "uploads/" . $stored);
+                finfo_close($finfo);
+
                 $stmt = $conn->prepare("INSERT INTO uploads (user_id, share_token, original_name, stored_name, mime_type, file_hash, password) VALUES (?,?,?,?,?,?,?)");
-                $stmt->execute([$_SESSION['user_id'], $token, basename($file["name"]), $stored, $file["type"], $hash, $hashedPassword]);
+                $stmt->execute([$_SESSION['user_id'], $token, basename($file["name"]), $stored, $mimeType, $hash, $hashedPassword]);
 
                 // Redirect naar de pagina met de schone linkparameter
                 header("Location: ?link=" . $token);
