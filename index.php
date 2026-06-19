@@ -88,6 +88,8 @@ if (isset($_POST["submit"])) {
                     $hashedPassword,
                 ]);
 
+                logEvent($conn, 'upload', $_SESSION['user_id'], $_SESSION['username'] ?? null, basename($file["name"]));
+
                 header("Location: ?link=" . $token);
                 exit;
             }
@@ -112,6 +114,7 @@ $myUploads = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 <nav class="topbar">
     <span class="brand">kevinstopmettelaatkomen</span>
+    <a href="php/logs.php" class="logout-link">Activity log</a>
     <a href="php/logout.php" class="logout-link">Logout</a>
 </nav>
 

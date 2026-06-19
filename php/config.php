@@ -36,4 +36,30 @@ try {
     // Never expose the real error — it could leak table names, credentials, etc.
     die("Database error. Try again later.");
 }
+
+// Make sure the logs table exists (auto-create so no manual migration is needed)
+$conn->exec("
+    CREATE TABLE IF NOT EXISTS logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        event_type VARCHAR(30) NOT NULL,
+        username VARCHAR(255) NULL,
+        user_id INT NULL,
+        file_name VARCHAR(255) NULL,
+        ip_address VARCHAR(45) NULL,
+        details VARCHAR(255) NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+");
+
+// Make sure the users table has a 'role' column (admin / user).
+// Wrapped in try/catch because MySQL has no "ADD COLUMN IF NOT EXISTS" before 8.0.29,
+// so on every page load we just try to add it and silently ignore the
+// "duplicate column" error if it's already there.
+try {
+    $conn->exec("ALTER TABLE users ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'user'");
+} catch (PDOException $e) {
+    // Column already exists — nothing to do
+}
+
+require_once __DIR__ . '/logger.php';
 ?>

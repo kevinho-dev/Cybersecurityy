@@ -1,28 +1,50 @@
 <?php
 /**
  * download.php — public download page
- * Anyone with the link must enter the password — including the file owner.
+ * Visitors must be logged in to see the password prompt and download the file.
+ * If not logged in, they are redirected to login.php (with a return URL so
+ * they end up back here after authenticating).
  */
 require_once 'config.php';
 
-$token = $_GET["token"] ?? "";
+// ── Account gate ─────────────────────────────────────────────────────────────
+// A user must be logged in before they can even see the password form.
+if (!isset($_SESSION['user_id'])) {
+    $returnTo = urlencode('download.php?token=' . ($_GET['token'] ?? ''));
+    header("Location: login.php?next=" . $returnTo);
+    exit;
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
-$stmt = $conn->prepare("SELECT * FROM uploads WHERE share_token = ?");
+$token = $_GET["token"] ?? "";
+$tokenNotFound = false;
+
+$stmt = $conn->prepare(
+    "SELECT uploads.*, users.username AS owner_username
+     FROM uploads
+     JOIN users ON users.id = uploads.user_id
+     WHERE share_token = ?"
+);
 $stmt->execute([$token]);
 $file = $stmt->fetch(PDO::FETCH_ASSOC);
 
-if (!$file) die("File not found.");
+if (!$file) {
+    http_response_code(404);
+    $tokenNotFound = true;
+}
 
 $toegang = false;
 
-// Grant access if the file has no password
-if (empty($file["password"])) {
-    $toegang = true;
-}
+if (!$tokenNotFound) {
+    // Grant access if the file has no password
+    if (empty($file["password"])) {
+        $toegang = true;
+    }
 
-// Grant access if verify.php already unlocked this token in the current session
-if (!$toegang && isset($_SESSION['unlocked_tokens'][$token]) && $_SESSION['unlocked_tokens'][$token] === true) {
-    $toegang = true;
+    // Grant access if verify.php already unlocked this token in the current session
+    if (!$toegang && isset($_SESSION['unlocked_tokens'][$token]) && $_SESSION['unlocked_tokens'][$token] === true) {
+        $toegang = true;
+    }
 }
 
 // NOTE: No owner bypass — the owner must also enter the password every time.
@@ -31,6 +53,7 @@ if (!$toegang && isset($_SESSION['unlocked_tokens'][$token]) && $_SESSION['unloc
 if ($toegang && (isset($_GET["download"]) || isset($_GET["direct"]))) {
     $path = "../uploads/" . $file["stored_name"];
     if (file_exists($path)) {
+        logEvent($conn, 'download', $file['user_id'], $file['owner_username'], $file['original_name']);
         header("Content-Type: " . $file["mime_type"]);
         header("Content-Disposition: attachment; filename=\"" . addslashes($file["original_name"]) . "\"");
         header("Content-Length: " . filesize($path));
@@ -39,16 +62,21 @@ if ($toegang && (isset($_GET["download"]) || isset($_GET["direct"]))) {
         readfile($path);
         exit;
     } else {
-        die("File not found on server.");
+        // File row exists in the DB but the file itself is missing from disk
+        http_response_code(404);
+        $fatalError = "This file could not be found on the server. It may have been removed.";
     }
 }
+?>
+<?php
+$pageTitle = $tokenNotFound ? "File not found" : htmlspecialchars($file["original_name"]);
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title><?= htmlspecialchars($file["original_name"]) ?> — kevinstopmettelaatkomen</title>
+<title><?= $pageTitle ?> — kevinstopmettelaatkomen</title>
 <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
@@ -56,7 +84,23 @@ if ($toegang && (isset($_GET["download"]) || isset($_GET["direct"]))) {
 <div class="auth-page">
 <div class="card auth-card download-card">
 
-<?php if ($toegang): ?>
+<?php if ($tokenNotFound): ?>
+<!-- Invalid/expired share link -->
+<div class="auth-header">
+    <div class="logo-mark">⚠️</div>
+    <h1>File not found</h1>
+    <p>This link is invalid or the file has been removed.</p>
+</div>
+
+<?php elseif (isset($fatalError)): ?>
+<!-- File row exists but the file is missing from disk -->
+<div class="auth-header">
+    <div class="logo-mark">⚠️</div>
+    <h1><?= htmlspecialchars($file["original_name"]) ?></h1>
+</div>
+<div class="alert alert-danger"><?= htmlspecialchars($fatalError) ?></div>
+
+<?php elseif ($toegang): ?>
 <!-- Access granted: show file preview + download button -->
 <div class="auth-header">
     <div class="logo-mark">

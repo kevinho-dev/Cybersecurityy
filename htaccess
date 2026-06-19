@@ -1,0 +1,4 @@
+# Prevent directory listing — files can still be opened directly via their
+# random filename (used by download.php and the dashboard thumbnails),
+# but nobody can browse this folder to see what's in it.
+Options -Indexes

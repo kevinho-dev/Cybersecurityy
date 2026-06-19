@@ -34,5 +34,6 @@ if (password_verify($password, $file['password'])) {
     $_SESSION['unlocked_tokens'][$token] = true;
     echo json_encode(['success' => true]);
 } else {
+    logEvent($conn, 'unlock_failed', $_SESSION['user_id'] ?? null, null, null, "Wrong password for token $token");
     echo json_encode(['success' => false, 'error' => 'Wrong password.']);
 }
