@@ -2,7 +2,7 @@
 /**
  * index.php — Upload dashboard
  */
-require_once 'config.php';
+require_once 'php/config.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: php/login.php");
@@ -96,7 +96,7 @@ if (isset($_POST["submit"])) {
 }
 
 // Fetch the logged-in user's files for the table
-$stmt = $conn->prepare("SELECT original_name, share_token, uploaded_at FROM uploads WHERE user_id = ? ORDER BY uploaded_at DESC");
+$stmt = $conn->prepare("SELECT original_name, share_token, mime_type, uploaded_at FROM uploads WHERE user_id = ? ORDER BY uploaded_at DESC");
 $stmt->execute([$_SESSION['user_id']]);
 $myUploads = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
@@ -183,7 +183,23 @@ $myUploads = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <tbody>
             <?php foreach ($myUploads as $upload): ?>
                 <tr>
-                    <td><?= htmlspecialchars($upload['original_name']) ?></td>
+                    <td>
+                        <div class="file-cell">
+                            <?php
+                            $imageMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+                            $isImage = in_array($upload['mime_type'], $imageMimes);
+                            ?>
+                            <span class="file-cell-thumb">
+                                <?php if ($isImage): ?>
+                                    <img src="php/thumbnail.php?token=<?= htmlspecialchars($upload['share_token']) ?>"
+                                         alt="" loading="lazy">
+                                <?php else: ?>
+                                    📄
+                                <?php endif; ?>
+                            </span>
+                            <span><?= htmlspecialchars($upload['original_name']) ?></span>
+                        </div>
+                    </td>
                     <td>
                         <!-- Copies the download URL to clipboard; password enforced on download page -->
                         <button class="file-link action-btn"
