@@ -1,11 +1,11 @@
 <?php
 /**
- * register.php — Secure registration with bcrypt
+ * register.php — new user registration
  */
 require_once 'config.php';
 
 if (isset($_SESSION['user_id'])) {
-    header("Location: index.php");
+    header("Location: ../index.php");
     exit;
 }
 
@@ -16,7 +16,6 @@ if (isset($_POST['register'])) {
     $password        = $_POST['password'];
     $confirmPassword = $_POST['confirm_password'];
 
-    // Validation
     if (empty($username) || empty($password)) {
         $error = "Fill all fields.";
     } elseif ($password !== $confirmPassword) {
@@ -24,17 +23,16 @@ if (isset($_POST['register'])) {
     } elseif (strlen($password) < 8) {
         $error = "Password must be 8+ characters.";
     } else {
-        // Prepared Statement: prevents SQL injection + checks for duplicates
+        // Check if username is already taken
         $stmt = $conn->prepare("SELECT id FROM users WHERE username = ?");
         $stmt->execute([$username]);
 
         if ($stmt->fetch()) {
             $error = "Username already taken.";
         } else {
-            // Bcrypt: auto-salts, computationally expensive (defeats brute-force)
+            // bcrypt: auto-generates a salt and is slow on purpose (slows brute-force)
             $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
-            // Insert via Prepared Statement
             $stmt = $conn->prepare("INSERT INTO users (username, password) VALUES (?, ?)");
             $stmt->execute([$username, $hashedPassword]);
 
@@ -48,8 +46,8 @@ if (isset($_POST['register'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Register — SecureShare</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Register — kevinstopmettelaatkomen</title>
+    <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
 
@@ -71,22 +69,24 @@ if (isset($_POST['register'])) {
         <form method="post">
             <div class="form-group">
                 <label for="username">Username</label>
-                <input type="text" id="username" name="username" placeholder="Choose a username" value="<?= htmlspecialchars($_POST['username'] ?? '') ?>" required autocomplete="username">
+                <input type="text" id="username" name="username"
+                       placeholder="Choose a username"
+                       value="<?= htmlspecialchars($_POST['username'] ?? '') ?>"
+                       required autocomplete="username">
             </div>
-
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" name="password" placeholder="Min 8 characters" required autocomplete="new-password">
+                <input type="password" id="password" name="password"
+                       placeholder="Min 8 characters"
+                       required autocomplete="new-password">
             </div>
-
             <div class="form-group">
                 <label for="confirm_password">Confirm password</label>
-                <input type="password" id="confirm_password" name="confirm_password" placeholder="Repeat password" required autocomplete="new-password">
+                <input type="password" id="confirm_password" name="confirm_password"
+                       placeholder="Repeat password"
+                       required autocomplete="new-password">
             </div>
-
-            <button type="submit" name="register" class="btn btn-primary btn-full">
-                Create account
-            </button>
+            <button type="submit" name="register" class="btn btn-primary btn-full">Create account</button>
         </form>
 
         <div class="auth-footer">
