@@ -1,11 +1,11 @@
 <?php
 /**
- * login.php — Secure login with Prepared Statements
+ * login.php — user login
  */
 require_once 'config.php';
 
 if (isset($_SESSION['user_id'])) {
-    header("Location: index.php");
+    header("Location: ../index.php");
     exit;
 }
 
@@ -15,20 +15,20 @@ if (isset($_POST['login'])) {
     $username = trim($_POST['username']);
     $password = $_POST['password'];
 
-    // Prepared Statement: prevents SQL injection (? = placeholder)
+    // Prepared statement prevents SQL injection
     $stmt = $conn->prepare("SELECT id, password FROM users WHERE username = ?");
     $stmt->execute([$username]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // Verify password with bcrypt (timing-safe comparison)
+    // password_verify: timing-safe bcrypt check
     if ($user && password_verify($password, $user['password'])) {
-        // Session Fixation prevention: regenerate ID after login
+        // Regenerate session ID after login to prevent session fixation attacks
         session_regenerate_id(true);
         $_SESSION['user_id'] = $user['id'];
-        header("Location: index.php");
+        header("Location: ../index.php");
         exit;
     } else {
-        // Vague error: prevents user enumeration
+        // Vague error on purpose: stops attackers finding out which usernames exist
         $error = "Invalid username or password.";
     }
 }
@@ -38,8 +38,8 @@ if (isset($_POST['login'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login — SecureShare</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Login — kevinstopmettelaatkomen</title>
+    <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
 
@@ -58,17 +58,18 @@ if (isset($_POST['login'])) {
         <form method="post">
             <div class="form-group">
                 <label for="username">Username</label>
-                <input type="text" id="username" name="username" placeholder="Enter your username" value="<?= htmlspecialchars($_POST['username'] ?? '') ?>" required autocomplete="username">
+                <input type="text" id="username" name="username"
+                       placeholder="Enter your username"
+                       value="<?= htmlspecialchars($_POST['username'] ?? '') ?>"
+                       required autocomplete="username">
             </div>
-
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" name="password" placeholder="Enter your password" required autocomplete="current-password">
+                <input type="password" id="password" name="password"
+                       placeholder="Enter your password"
+                       required autocomplete="current-password">
             </div>
-
-            <button type="submit" name="login" class="btn btn-primary btn-full">
-                Login
-            </button>
+            <button type="submit" name="login" class="btn btn-primary btn-full">Login</button>
         </form>
 
         <div class="auth-footer">
