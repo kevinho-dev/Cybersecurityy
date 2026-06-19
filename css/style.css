@@ -310,6 +310,76 @@ input[type="file"] {
   cursor: pointer;
 }
 
+/* ── File Preview ───────────────────────────────────────────── */
+.file-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.875rem 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.file-preview-thumb {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: rgba(124, 92, 252, 0.12);
+  border: 1px solid var(--border-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  overflow: hidden;
+}
+
+.file-preview-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.file-preview-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.file-preview-name {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-preview-size {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.file-preview-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.25rem;
+  transition: color var(--transition);
+  flex-shrink: 0;
+}
+
+.file-preview-remove:hover {
+  color: var(--danger);
+}
+
 /* ── Upload Inline Form Row ─────────────────────────────────── */
 .upload-form {
   display: flex;
@@ -650,7 +720,8 @@ td:first-child {
   th, td {
     padding: 0.75rem 0.875rem;
   }
-}/* ============================================================
+}
+/* ============================================================
    modal.css — Password modal styles
    Used by: index.php, download.php
    ============================================================ */

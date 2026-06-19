@@ -2,7 +2,7 @@
 /**
  * index.php — Upload dashboard
  */
-require_once 'php/config.php';
+require_once 'config.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: php/login.php");
@@ -126,10 +126,19 @@ $myUploads = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <form method="post" enctype="multipart/form-data" class="upload-form">
 
             <div class="upload-zone">
-                <input type="file" name="fileToUpload"
+                <input type="file" name="fileToUpload" id="fileToUpload"
                        accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" required>
                 <span class="upload-label">Click or drag a file here</span>
                 <span class="upload-hint">JPG, PNG, GIF, WebP, PDF, Word, Excel, TXT · max 25 MB</span>
+            </div>
+
+            <div id="filePreview" class="file-preview" style="display:none;">
+                <div class="file-preview-thumb" id="filePreviewThumb"></div>
+                <div class="file-preview-info">
+                    <span class="file-preview-name" id="filePreviewName"></span>
+                    <span class="file-preview-size" id="filePreviewSize"></span>
+                </div>
+                <button type="button" class="file-preview-remove" id="filePreviewRemove" title="Remove file">&times;</button>
             </div>
 
             <div class="upload-row">

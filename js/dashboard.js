@@ -86,3 +86,51 @@ form.addEventListener('submit', function(e) {
             errorDiv.style.display = 'block';
         });
 });
+
+/* ── File upload preview ─────────────────────────────────────
+   Shows filename, size, and a thumbnail (for images) the moment
+   a file is selected in the upload form. Has a × button to clear
+   the selection before submitting.
+*/
+const fileInput      = document.getElementById('fileToUpload');
+const preview        = document.getElementById('filePreview');
+const previewThumb    = document.getElementById('filePreviewThumb');
+const previewName     = document.getElementById('filePreviewName');
+const previewSize     = document.getElementById('filePreviewSize');
+const previewRemove   = document.getElementById('filePreviewRemove');
+
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+if (fileInput) {
+    fileInput.addEventListener('change', function () {
+        const file = fileInput.files[0];
+
+        if (!file) {
+            preview.style.display = 'none';
+            return;
+        }
+
+        previewName.textContent = file.name;
+        previewSize.textContent = formatFileSize(file.size);
+
+        if (file.type.startsWith('image/')) {
+            previewThumb.innerHTML = '';
+            const img = document.createElement('img');
+            img.src = URL.createObjectURL(file);
+            previewThumb.appendChild(img);
+        } else {
+            previewThumb.innerHTML = '📄';
+        }
+
+        preview.style.display = 'flex';
+    });
+
+    previewRemove.addEventListener('click', function () {
+        fileInput.value = '';
+        preview.style.display = 'none';
+    });
+}
