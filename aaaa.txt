@@ -1,0 +1,14 @@
+# Block PHP execution completely
+<FilesMatch "\.php$">
+    Require all denied
+</FilesMatch>
+# Block other script types
+<FilesMatch "\.(phtml|php[0-9]|cgi|pl|py|sh|asp|aspx|jsp)$">
+    Require all denied
+</FilesMatch>
+# Disable directory listing
+Options -Indexes
+# Block hidden files
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
