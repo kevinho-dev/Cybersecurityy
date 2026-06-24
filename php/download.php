@@ -4,19 +4,13 @@ require_once 'config.php';
 // ─────────────────────────────────────────────────────────────────────────────
 // AUTHENTICATION GATE
 // Only logged-in users may access this page.
-// If the user isn't logged in, redirect them to login and preserve the download
-// URL in ?next= so they come straight back here after logging in.
 // ─────────────────────────────────────────────────────────────────────────────
 
 if (!isset($_SESSION['user_id'])) {
     $token = $_GET['token'] ?? '';
-
-    // Only include a ?next= redirect if the token looks valid.
-    // An invalid token can't succeed after login anyway.
-    $next = preg_match('/^[a-f0-9]{64}$/', $token)
+    $next  = preg_match('/^[a-f0-9]{64}$/', $token)
         ? urlencode("download.php?token=$token")
         : urlencode('download.php');
-
     header("Location: login.php?next=$next");
     exit;
 }
@@ -24,22 +18,18 @@ if (!isset($_SESSION['user_id'])) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FILE LOOKUP
-// Find the file in the database using the share token from the URL.
 // ─────────────────────────────────────────────────────────────────────────────
 
 $token = $_GET['token'] ?? '';
 
-// Default states for the three possible outcomes on this page.
 $fileNotFound  = false;
 $fatalError    = '';
 $accessGranted = false;
 $file          = false;
 
-// Reject obviously malformed tokens before touching the database.
 if (!preg_match('/^[a-f0-9]{64}$/', $token)) {
     $fileNotFound = true;
 } else {
-    // Join with users so we can show the owner's username in the log.
     $stmt = $conn->prepare(
         "SELECT uploads.*, users.username AS owner_username
          FROM uploads
@@ -57,37 +47,40 @@ if (!preg_match('/^[a-f0-9]{64}$/', $token)) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ACCESS CONTROL
-// A file can only be accessed if:
-//   (a) It has no password — anyone logged in may download it.
-//   (b) The user already unlocked it this session via verify.php.
+//
+// SECURITY CHANGE: Password MUST be verified before showing ANY file info.
+//   - No file name, no preview, no metadata until password is entered.
+//   - Both the preview page AND the download action require verified session.
+//   - Direct URL access to ?download=1 without session unlock is blocked.
 // ─────────────────────────────────────────────────────────────────────────────
 
 if (!$fileNotFound && $file) {
     if (empty($file['password'])) {
-        // No password required.
+        // File has no password — anyone logged in may access it.
         $accessGranted = true;
     } elseif (isset($_SESSION['unlocked_tokens'][$token])) {
         // User entered the correct password earlier in this session.
         $accessGranted = true;
     }
 
-
     // ─────────────────────────────────────────────────────────────────────────
     // FILE SERVING
-    // If access is granted and the user clicked Download, send the actual file.
+    // SECURITY: Only serve the file if access is granted AND session is unlocked.
+    // Attempting ?download=1 without a valid unlocked session redirects to
+    // the password form — it cannot be bypassed.
     // ─────────────────────────────────────────────────────────────────────────
 
-    if ($accessGranted && (isset($_GET['download']) || isset($_GET['direct']))) {
+    if (isset($_GET['download']) || isset($_GET['direct'])) {
+        // Hard gate: if not verified, do NOT serve the file — redirect to password page.
+        if (!$accessGranted) {
+            // Strip download/direct params so we land on the password form.
+            header('Location: ?token=' . urlencode($token));
+            exit;
+        }
+
         $uploadsDir = realpath(__DIR__ . '/../uploads/');
         $filePath   = realpath(__DIR__ . '/../uploads/' . $file['stored_name']);
 
-        // PATH-TRAVERSAL GUARD
-        // A malicious stored_name like "../../etc/passwd" could escape the uploads
-        // folder. realpath() resolves the final absolute path, and we check that
-        // it starts with the uploads directory path.
-        //
-        // We append DIRECTORY_SEPARATOR so a folder named "uploads_evil/" cannot
-        // trick the str_starts_with() check (since "uploads_evil" starts with "uploads").
         $pathIsValid = $filePath
             && $uploadsDir
             && str_starts_with($filePath, $uploadsDir . DIRECTORY_SEPARATOR)
@@ -96,9 +89,10 @@ if (!$fileNotFound && $file) {
         if ($pathIsValid) {
             logEvent($conn, 'download', $file['user_id'], $file['owner_username'], $file['original_name']);
 
-            // RFC 5987 dual filename encoding:
-            //   filename="..."        → ASCII fallback for old browsers
-            //   filename*=UTF-8''...  → full Unicode filename for modern browsers
+            // Clear the session unlock so the user must re-enter the password
+            // for any subsequent download of this file.
+            unset($_SESSION['unlocked_tokens'][$token]);
+
             $asciiName = preg_replace('/[^\x20-\x7E]/', '_', $file['original_name']);
             header('Content-Type: '         . $file['mime_type']);
             header('Content-Disposition: attachment; filename="' . $asciiName . '"; filename*=UTF-8\'\'' . rawurlencode($file['original_name']));
@@ -106,7 +100,6 @@ if (!$fileNotFound && $file) {
             header('X-Content-Type-Options: nosniff');
             header('Cache-Control: no-store');
 
-            // Clear any output buffering so the file bytes aren't mixed with HTML.
             if (ob_get_level()) ob_end_clean();
             readfile($filePath);
             exit;
@@ -119,15 +112,22 @@ if (!$fileNotFound && $file) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PAGE RENDERING
-// Show different content based on what state we ended up in above.
 // ─────────────────────────────────────────────────────────────────────────────
 
-$pageTitle = $fileNotFound ? 'Not found' : htmlspecialchars($file['original_name']);
+// SECURITY: Do NOT reveal the real filename in the page title before access is granted.
+if ($fileNotFound) {
+    $pageTitle = 'Not found';
+} elseif (!$accessGranted) {
+    // File is locked — show a generic title; do not expose the real filename.
+    $pageTitle = 'Protected file';
+} else {
+    $pageTitle = htmlspecialchars($file['original_name']);
+}
+
 render_head($pageTitle, false, '../css/style.css');
 echo '<div class="card auth-card download-card">';
 
 if ($fileNotFound) {
-    // Unknown token — don't reveal whether the file ever existed.
     echo '<div class="auth-header">
             <div class="logo-mark">⚠️</div>
             <h1>File not found</h1>
@@ -135,15 +135,32 @@ if ($fileNotFound) {
           </div>';
 
 } elseif ($fatalError) {
-    // File record exists in the database but the file is gone from disk.
     echo '<div class="auth-header">
             <div class="logo-mark">⚠️</div>
-            <h1>' . htmlspecialchars($file['original_name']) . '</h1>
+            <h1>Error</h1>
           </div>';
     render_alerts([$fatalError]);
 
-} elseif ($accessGranted) {
-    // User has access — show a preview and the Download button.
+} elseif (!$accessGranted) {
+    // ── PASSWORD FORM ─────────────────────────────────────────────────────────
+    // SECURITY: Show ONLY the password form. No filename, no file type, no size,
+    // no preview. Nothing about the file is revealed until the password is correct.
+    // render_modal() with isOpen:true renders the password form inline on the page.
+    echo '<div class="auth-header">
+            <div class="logo-mark">🔐</div>
+            <h1>Protected file</h1>
+            <p>Enter the password to access this file.</p>
+          </div>';
+    render_modal([
+        'token'      => $token,
+        'filename'   => '',           // SECURITY: do NOT pass the real filename here.
+        'verifyUrl'  => 'verify.php',
+        'successUrl' => '?token={token}',   // After unlock → preview page (no direct download yet).
+        'isOpen'     => true,
+    ]);
+
+} else {
+    // ── ACCESS GRANTED: PREVIEW + DOWNLOAD BUTTON ─────────────────────────────
     $isImage = str_starts_with($file['mime_type'], 'image/');
     $icon    = $isImage ? '🖼️' : '📄';
     $ext     = strtoupper(pathinfo($file['original_name'], PATHINFO_EXTENSION));
@@ -157,7 +174,7 @@ if ($fileNotFound) {
     echo '</div>';
 
     if ($isImage) {
-        // Show a thumbnail preview for image files.
+        // Only show thumbnail after password is verified.
         echo '<img src="thumbnail.php?token=' . htmlspecialchars($token) . '" alt=""
                    style="width:100%; border-radius: var(--radius-md); margin-bottom: 1.25rem; display:block;">';
     } else {
@@ -166,24 +183,26 @@ if ($fileNotFound) {
            . htmlspecialchars($ext) . ' file ready.</div>';
     }
 
-    echo '<a href="?token=' . htmlspecialchars($token) . '&download=1" '
-       . 'class="btn btn-primary btn-full">Download Securely</a>';
-
-} else {
-    // File is password-protected and the user hasn't unlocked it yet.
-    // Show the password modal immediately (isOpen: true).
-    echo '<div class="auth-header">
-            <div class="logo-mark">🔐</div>
-            <h1>' . htmlspecialchars($file['original_name']) . '</h1>
-            <p>This file is password&#8209;protected.</p>
-          </div>';
-    render_modal([
-        'token'      => $token,
-        'filename'   => $file['original_name'],
-        'verifyUrl'  => 'verify.php',
-        'successUrl' => '?token={token}&download=1',
-        'isOpen'     => true,
-    ]);
+    // Download button — for password-protected files this opens the password modal
+    // via the existing action-btn handler in app.js (same pattern as the dashboard).
+    // successUrl uses {token} placeholder — JS replaces it at submit time.
+    if (!empty($file['password'])) {
+        render_modal([
+            'token'      => $token,
+            'filename'   => $file['original_name'],
+            'verifyUrl'  => 'verify.php',
+            'successUrl' => '?token={token}&download=1',
+            'isOpen'     => false,
+        ]);
+        echo '<button class="btn btn-primary btn-full action-btn"
+                      data-token="'    . htmlspecialchars($token)                . '"
+                      data-filename="' . htmlspecialchars($file['original_name']) . '"
+                      data-action="download">Download Securely</button>';
+    } else {
+        // No password set — direct download link is fine.
+        echo '<a href="?token=' . htmlspecialchars($token) . '&amp;download=1"
+                 class="btn btn-primary btn-full">Download Securely</a>';
+    }
 }
 
 echo '</div>';

@@ -33,7 +33,7 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 
 // Content Security Policy: define exactly where scripts, styles, and fonts may load from.
 // 'self' means "only from our own domain". We allow Google Fonts as an exception.
-header("Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;");
+header("Content-Security-Policy: default-src 'self'; img-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;");
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -184,6 +184,25 @@ try {
 } catch (PDOException $e) {
     // Column already exists — this is expected on every run after the first.
 }
+
+
+// Create the shared_files table if it doesn't exist yet.
+// This table records when one user explicitly shares a file with another user.
+// shared_by  → user_id of the person who shared the file.
+// shared_with → user_id of the person who can now see it in "Files Shared With Me".
+// upload_id   → references the uploads table so we inherit all file metadata.
+$conn->exec("
+    CREATE TABLE IF NOT EXISTS shared_files (
+        id           INT AUTO_INCREMENT PRIMARY KEY,
+        upload_id    INT          NOT NULL,
+        shared_by    INT          NOT NULL,
+        shared_with  INT          NOT NULL,
+        shared_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_shared_with (shared_with),
+        INDEX idx_shared_by   (shared_by),
+        UNIQUE KEY uq_share (upload_id, shared_with)
+    )
+");
 
 
 // Load the shared helper functions and the audit logger.

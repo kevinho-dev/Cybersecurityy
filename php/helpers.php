@@ -67,9 +67,11 @@ function get_image_mimes(): array
 function render_alerts(array $errors = [], array $successes = []): void
 {
     foreach ($errors    as $msg) {
+        if ($msg === '' || $msg === null) continue;
         echo '<div class="alert alert-danger">'  . htmlspecialchars($msg) . '</div>';
     }
     foreach ($successes as $msg) {
+        if ($msg === '' || $msg === null) continue;
         echo '<div class="alert alert-success">' . htmlspecialchars($msg) . '</div>';
     }
 }
@@ -97,10 +99,12 @@ function render_head(string $title, bool $isAuth = false, string $css = 'css/sty
         echo '<div class="auth-page"><div class="card auth-card">';
     } else {
         // Regular layout: top nav bar followed by a page content wrapper.
+        // Build root-relative paths so nav links work from any subdirectory.
+        $base = rtrim(dirname(dirname($_SERVER['PHP_SELF'])), '/\\');
         echo '<nav class="topbar">'
            . '<span class="brand">kevinstopmettelaatkomen</span>'
-           . '<a href="php/logs.php" class="logout-link">Activity log</a>'
-           . '<a href="php/logout.php" class="logout-link">Logout</a>'
+           . '<a href="' . $base . '/php/logs.php" class="logout-link">Activity log</a>'
+           . '<a href="' . $base . '/php/logout.php" class="logout-link">Logout</a>'
            . '</nav>'
            . '<div class="page-wrapper">';
     }

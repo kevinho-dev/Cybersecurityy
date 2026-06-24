@@ -2,7 +2,6 @@
 require_once 'config.php';
 
 // Only logged-in users may load thumbnails.
-// Returning 403 Forbidden without any body prevents leaking file existence.
 if (!isset($_SESSION['user_id'])) {
     http_response_code(403);
     exit;
@@ -10,32 +9,40 @@ if (!isset($_SESSION['user_id'])) {
 
 $token = $_GET['token'] ?? '';
 
-// Reject malformed tokens before touching the database.
 if (!preg_match('/^[a-f0-9]{64}$/', $token)) {
     http_response_code(400);
     exit;
 }
 
-// The WHERE clause includes user_id so a user can only load thumbnails for
-// their own files — not for files uploaded by other users.
-// This prevents one user from enumerating another user's files via this endpoint.
+// Fetch the file record — we allow the file owner OR a user who has unlocked
+// the token this session to load the thumbnail.
 $stmt = $conn->prepare(
-    "SELECT stored_name, mime_type FROM uploads WHERE share_token = ? AND user_id = ?"
+    "SELECT stored_name, mime_type, password, user_id FROM uploads WHERE share_token = ?"
 );
-$stmt->execute([$token, $_SESSION['user_id']]);
+$stmt->execute([$token]);
 $file = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// Only serve the file if it exists AND is an image type.
 if (!$file || !in_array($file['mime_type'], get_image_mimes())) {
     http_response_code(404);
+    exit;
+}
+
+// SECURITY: Only serve the thumbnail if:
+//   (a) The requesting user is the file owner, OR
+//   (b) The file has no password, OR
+//   (c) The user has verified the password this session.
+$isOwner   = ((int) $file['user_id'] === (int) $_SESSION['user_id']);
+$noPass    = empty($file['password']);
+$unlocked  = isset($_SESSION['unlocked_tokens'][$token]);
+
+if (!$isOwner && !$noPass && !$unlocked) {
+    http_response_code(403);
     exit;
 }
 
 $uploadsDir = realpath(__DIR__ . '/../uploads/');
 $filePath   = realpath(__DIR__ . '/../uploads/' . $file['stored_name']);
 
-// PATH-TRAVERSAL GUARD — same logic as download.php.
-// Verify the resolved path is inside the uploads folder before serving.
 if (
     !$filePath   ||
     !$uploadsDir ||
@@ -46,7 +53,6 @@ if (
     exit;
 }
 
-// Send the image with a short cache time so the browser doesn't reload it on every visit.
 header('Content-Type: '    . $file['mime_type']);
 header('Cache-Control: private, max-age=3600');
 readfile($filePath);

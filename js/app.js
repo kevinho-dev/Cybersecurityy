@@ -1,40 +1,36 @@
 /**
  * app.js — All client-side JavaScript for the application.
  *
- * This file handles three independent features:
+ * This file handles four independent features:
  *   1. The password modal (pop-up dialog used on the dashboard and download page)
- *   2. Dashboard action buttons (Share / Download trigger the modal)
+ *   2. Dashboard action buttons (Share / Download / Share-with-user trigger modals)
  *   3. File upload preview (shows the selected file before submitting)
+ *   4. Share-with-user modal (sends a file to another registered user)
  *
  * We wait for DOMContentLoaded before running, which guarantees that all HTML
  * elements exist before we try to find them.
  */
 document.addEventListener('DOMContentLoaded', () => {
 
-    // The CSRF token is embedded in a <meta> tag by PHP's csrfMetaTag() function.
-    // We must include it in every fetch() POST so the server can verify the request
-    // didn't come from a malicious third-party website (CSRF protection).
+    // Remove ?link= from the URL bar after a successful upload redirect,
+    // so refreshing doesn't re-show the share link box.
+    if (window.location.search.includes('link=')) {
+        history.replaceState(null, '', window.location.pathname);
+    }
+
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
 
     const modal = document.getElementById('passwordModal');
 
-    // Only initialise features whose HTML elements exist on this page.
     if (modal) initModal(modal, csrf);
-    initDashboardButtons(modal);
+    initDashboardButtons(modal, csrf);
+    initShareUserModal(csrf);
     initFilePreview();
 });
 
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. PASSWORD MODAL
-//
-// The modal reads its configuration from data-* attributes on the #passwordModal div.
-// These attributes are set either by PHP (render_modal) or by the dashboard buttons below.
-//
-//   data-token       — the file's share token
-//   data-action      — 'download' or 'share'
-//   data-verify-url  — the PHP endpoint to POST the password to
-//   data-success-url — where to redirect after success; {token} is replaced at runtime
 // ─────────────────────────────────────────────────────────────────────────────
 
 function initModal(modal, csrf) {
@@ -43,77 +39,67 @@ function initModal(modal, csrf) {
     const errorDiv  = document.getElementById('modalError');
     const passInput = document.getElementById('modalPassword');
 
-    // Three ways to close the modal without submitting the form.
     if (closeBtn) closeBtn.onclick = () => closeModal(modal);
     modal.addEventListener('click', e => {
-        // Only close if the user clicked the dark overlay, not the white card inside.
         if (e.target === modal) closeModal(modal);
     });
-    document.addEventListener('keydown', e => {
-        if (e.key === 'Escape' && modal.style.display === 'flex') closeModal(modal);
-    });
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && modal.style.display === 'flex') closeModal(modal);
+        });
 
-    if (!form) return;
+            if (!form) return;
 
-    form.onsubmit = e => {
-        e.preventDefault();  // Stop the form from doing a normal page-reload submit.
-        errorDiv.style.display = 'none';
+            form.onsubmit = e => {
+                e.preventDefault();
+                errorDiv.style.display = 'none';
 
-        const action = modal.dataset.action ?? 'download';
+                const action = modal.dataset.action ?? 'download';
 
-        // Build the POST body. FormData automatically handles encoding.
-        const fd = new FormData();
-        fd.append('token',      modal.dataset.token);
-        fd.append('password',   passInput.value);
-        fd.append('action',     action);
-        fd.append('csrf_token', csrf);
+                const fd = new FormData();
+                fd.append('token',      modal.dataset.token);
+                fd.append('password',   passInput.value);
+                fd.append('action',     action);
+                fd.append('csrf_token', csrf);
 
-        // Send the password to verify.php and wait for a JSON response.
-        fetch(modal.dataset.verifyUrl, { method: 'POST', body: fd })
-            .then(response => {
-                // Treat any non-2xx HTTP status as a failure.
-                if (!response.ok) throw new Error('Server error');
-                return response.json();
-            })
-            .then(data => {
-                if (data.success) {
-                    if (action === 'share') {
-                        // Build the shareable download URL and copy it to the clipboard.
-                        const base = window.location.origin
+                fetch(modal.dataset.verifyUrl, { method: 'POST', body: fd })
+                .then(response => {
+                    if (!response.ok) throw new Error('Server error');
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        if (action === 'share') {
+                            const base = window.location.origin
                             + window.location.pathname.replace(/\/(index\.php)?$/, '');
-                        const url  = `${base}/php/download.php?token=${encodeURIComponent(modal.dataset.token)}`;
+                            const url  = `${base}/php/download.php?token=${encodeURIComponent(modal.dataset.token)}`;
 
-                        navigator.clipboard.writeText(url)
+                            navigator.clipboard.writeText(url)
                             .then(()  => alert('Copied!'))
-                            .catch(() => alert('Link:\n' + url));  // Fallback if clipboard is denied.
+                            .catch(() => alert('Link:\n' + url));
 
-                        closeModal(modal);
-                    } else {
-                        // Replace the {token} placeholder in the success URL and redirect.
-                        window.location.href = modal.dataset.successUrl
+                            closeModal(modal);
+                        } else {
+                            window.location.href = modal.dataset.successUrl
                             .replace('{token}', encodeURIComponent(modal.dataset.token));
+                        }
+                    } else {
+                        errorDiv.textContent   = data.error ?? 'Error';
+                        errorDiv.style.display = 'block';
+                        passInput.value        = '';
+                        passInput.focus();
                     }
-                } else {
-                    // Show the server's error message inside the modal.
-                    errorDiv.textContent   = data.error ?? 'Error';
+                })
+                .catch(() => {
+                    errorDiv.textContent   = 'Network error.';
                     errorDiv.style.display = 'block';
-                    passInput.value        = '';  // Clear the password field so they can retry.
-                    passInput.focus();
-                }
-            })
-            .catch(() => {
-                errorDiv.textContent   = 'Network error.';
-                errorDiv.style.display = 'block';
-            });
-    };
+                });
+            };
 }
 
-/** Opens the modal by making it visible. */
 function openModal(modal) {
     modal.style.display = 'flex';
 }
 
-/** Closes the modal by hiding it. */
 function closeModal(modal) {
     modal.style.display = 'none';
 }
@@ -121,23 +107,31 @@ function closeModal(modal) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. DASHBOARD ACTION BUTTONS
-//
-// Each Share and Download button in the file table has data-* attributes:
-//   data-token    — the file's share token
-//   data-filename — the human-readable filename to show inside the modal
-//   data-action   — 'share' or 'download'
-//
-// Clicking a button loads these values into the modal, then opens it.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function initDashboardButtons(modal) {
-    if (!modal) return;  // These buttons only exist on the dashboard page.
-
+function initDashboardButtons(modal, csrf) {
     document.querySelectorAll('.action-btn').forEach(button => {
         button.onclick = function () {
-            // Load this button's file info into the modal.
+            const action = this.dataset.action;
+
+            if (action === 'share_with_user') {
+                // Open the share-with-user modal instead of the password modal.
+                const shareModal = document.getElementById('shareUserModal');
+                if (!shareModal) return;
+                shareModal.dataset.token = this.dataset.token;
+                document.getElementById('shareUserFilename').textContent = this.dataset.filename;
+                document.getElementById('shareUserInput').value           = '';
+                document.getElementById('shareUserError').style.display   = 'none';
+                document.getElementById('shareUserSuccess').style.display = 'none';
+                shareModal.style.display = 'flex';
+                document.getElementById('shareUserInput').focus();
+                return;
+            }
+
+            if (!modal) return;
+            // Load this button's file info into the password modal.
             modal.dataset.token  = this.dataset.token;
-            modal.dataset.action = this.dataset.action;
+            modal.dataset.action = action;
 
             document.getElementById('modalFilename').textContent = this.dataset.filename;
             document.getElementById('modalPassword').value       = '';
@@ -152,16 +146,11 @@ function initDashboardButtons(modal) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. FILE UPLOAD PREVIEW
-//
-// When the user selects a file, show a small preview below the file input:
-//   - For images: a thumbnail generated from the local file (no upload needed).
-//   - For other files: a 📄 icon.
-// The × button resets the input and hides the preview.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function initFilePreview() {
-    const fileInput    = document.getElementById('fileToUpload');
-    if (!fileInput) return;  // Only exists on the dashboard page.
+    const fileInput = document.getElementById('fileToUpload');
+    if (!fileInput) return;
 
     const preview      = document.getElementById('filePreview');
     const previewThumb = document.getElementById('filePreviewThumb');
@@ -171,18 +160,12 @@ function initFilePreview() {
 
     fileInput.onchange = () => {
         const file = fileInput.files[0];
-
-        if (!file) {
-            preview.style.display = 'none';
-            return;
-        }
+        if (!file) { preview.style.display = 'none'; return; }
 
         previewName.textContent = file.name;
         previewSize.textContent = formatFileSize(file.size);
 
         if (file.type.startsWith('image/')) {
-            // URL.createObjectURL() creates a temporary local URL for the file —
-            // the image is shown in the browser without uploading it to the server.
             previewThumb.innerHTML = '';
             const img = document.createElement('img');
             img.src   = URL.createObjectURL(file);
@@ -195,17 +178,86 @@ function initFilePreview() {
     };
 
     removeBtn.onclick = () => {
-        fileInput.value       = '';  // Clears the file selection.
+        fileInput.value       = '';
         preview.style.display = 'none';
     };
 }
 
-/**
- * Converts a number of bytes into a readable string like "1.4 MB".
- * Used to show the file size in the upload preview.
- */
 function formatFileSize(bytes) {
     if (bytes < 1024)       return bytes + ' B';
     if (bytes < 1_048_576)  return (bytes / 1024).toFixed(1)     + ' KB';
     return                         (bytes / 1_048_576).toFixed(1) + ' MB';
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. SHARE WITH USER MODAL
+//
+// Opened when the user clicks "Share with user" on an uploaded file.
+// POSTs to php/share.php and shows success/error feedback inline.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function initShareUserModal(csrf) {
+    const shareModal = document.getElementById('shareUserModal');
+    if (!shareModal) return;
+
+    const closeBtn    = document.getElementById('shareUserModalClose');
+    const submitBtn   = document.getElementById('shareUserSubmit');
+    const usernameInput = document.getElementById('shareUserInput');
+    const errorDiv    = document.getElementById('shareUserError');
+    const successDiv  = document.getElementById('shareUserSuccess');
+
+    if (closeBtn) closeBtn.onclick = () => { shareModal.style.display = 'none'; };
+    shareModal.addEventListener('click', e => {
+        if (e.target === shareModal) shareModal.style.display = 'none';
+    });
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && shareModal.style.display === 'flex') {
+                shareModal.style.display = 'none';
+            }
+        });
+
+        if (!submitBtn) return;
+
+        submitBtn.onclick = () => {
+            errorDiv.style.display   = 'none';
+            successDiv.style.display = 'none';
+
+            const username = usernameInput.value.trim();
+            if (!username) {
+                errorDiv.textContent   = 'Enter a username.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            const fd = new FormData();
+            fd.append('token',               shareModal.dataset.token);
+            fd.append('share_with_username', username);
+            fd.append('csrf_token',          csrf);
+
+            submitBtn.disabled = true;
+
+            fetch('php/share.php', { method: 'POST', body: fd })
+            .then(r => { if (!r.ok) throw new Error('Server error'); return r.json(); })
+            .then(data => {
+                if (data.success) {
+                    successDiv.textContent   = data.message ?? 'Shared!';
+                    successDiv.style.display = 'block';
+                    usernameInput.value      = '';
+                } else {
+                    errorDiv.textContent   = data.error ?? 'Error';
+                    errorDiv.style.display = 'block';
+                }
+            })
+            .catch(() => {
+                errorDiv.textContent   = 'Network error.';
+                errorDiv.style.display = 'block';
+            })
+            .finally(() => { submitBtn.disabled = false; });
+        };
+
+        // Allow pressing Enter in the username field to submit.
+        usernameInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter') submitBtn.click();
+        });
 }
