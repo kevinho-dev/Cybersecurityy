@@ -1,99 +1,35 @@
 <?php
-/**
- * register.php — new user registration
- */
 require_once 'config.php';
+require_guest();
 
-if (isset($_SESSION['user_id'])) {
-    header("Location: ../index.php");
-    exit;
-}
-
-$error = $success = "";
+ $error = $success = ""; $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 
 if (isset($_POST['register'])) {
-    $username        = trim($_POST['username']);
-    $password        = $_POST['password'];
-    $confirmPassword = $_POST['confirm_password'];
-
-    if (empty($username) || empty($password)) {
-        $error = "Fill all fields.";
-    } elseif ($password !== $confirmPassword) {
-        $error = "Passwords don't match.";
-    } elseif (strlen($password) < 8) {
-        $error = "Password must be 8+ characters.";
-    } else {
-        // Check if username is already taken
-        $stmt = $conn->prepare("SELECT id FROM users WHERE username = ?");
-        $stmt->execute([$username]);
-
-        if ($stmt->fetch()) {
-            $error = "Username already taken.";
-        } else {
-            // bcrypt: auto-generates a salt and is slow on purpose (slows brute-force)
-            $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
-
-            $stmt = $conn->prepare("INSERT INTO users (username, password) VALUES (?, ?)");
-            $stmt->execute([$username, $hashedPassword]);
-
-            $success = "Account created! You can now login.";
+    if (!verifyCsrf()) $error = "Invalid request.";
+    elseif (isRateLimited($conn, 'register_attempt', $ip, 3, 60)) $error = "Too many registration attempts.";
+    else {
+        $user = trim($_POST['username']); $pass = $_POST['password']; $confirm = $_POST['confirm_password'];
+        if (!$user || !$pass) $error = "Fill all fields.";
+        elseif (!preg_match('/^[a-zA-Z0-9_]{3,30}$/', $user)) $error = "Username must be 3-30 chars (alphanumeric/underscore).";
+        elseif ($pass !== $confirm) $error = "Passwords don't match.";
+        elseif (strlen($pass) < 8 || !preg_match('/[a-z]/', $pass) || !preg_match('/[A-Z]/', $pass) || !preg_match('/[0-9]/', $pass)) $error = "Password must be 8+ chars with uppercase, lowercase, and a number.";
+        else {
+            $stmt = $conn->prepare("SELECT id FROM users WHERE username = ?"); $stmt->execute([$user]);
+            if ($stmt->fetch()) $error = "Username already taken.";
+            else { $conn->prepare("INSERT INTO users (username, password) VALUES (?, ?)")->execute([$user, password_hash($pass, PASSWORD_DEFAULT)]); $success = "Account created!"; }
         }
     }
 }
+
+render_head('Register', true, '../css/style.css');
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Register — kevinstopmettelaatkomen</title>
-    <link rel="stylesheet" href="../css/style.css">
-</head>
-<body>
-
-<div class="auth-page">
-    <div class="card auth-card">
-        <div class="auth-header">
-            <div class="logo-mark">✦</div>
-            <h1>Create account</h1>
-            <p>Free secure file sharing</p>
-        </div>
-
-        <?php if ($error): ?>
-            <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
-        <?php endif; ?>
-        <?php if ($success): ?>
-            <div class="alert alert-success"><?= htmlspecialchars($success) ?></div>
-        <?php endif; ?>
-
-        <form method="post">
-            <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" id="username" name="username"
-                       placeholder="Choose a username"
-                       value="<?= htmlspecialchars($_POST['username'] ?? '') ?>"
-                       required autocomplete="username">
-            </div>
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" name="password"
-                       placeholder="Min 8 characters"
-                       required autocomplete="new-password">
-            </div>
-            <div class="form-group">
-                <label for="confirm_password">Confirm password</label>
-                <input type="password" id="confirm_password" name="confirm_password"
-                       placeholder="Repeat password"
-                       required autocomplete="new-password">
-            </div>
-            <button type="submit" name="register" class="btn btn-primary btn-full">Create account</button>
-        </form>
-
-        <div class="auth-footer">
-            Already have an account? <a href="login.php">Login here</a>
-        </div>
-    </div>
-</div>
-
-</body>
-</html>
+    <div class="auth-header"><div class="logo-mark">✦</div><h1>Create account</h1><p>Free secure file sharing</p></div>
+    <?= render_alerts([$error], [$success]) ?>
+    <form method="post"><?= csrfField() ?>
+        <div class="form-group"><label for="username">Username</label><input type="text" id="username" name="username" placeholder="Choose a username" value="<?= htmlspecialchars($_POST['username'] ?? '') ?>" required autocomplete="username" minlength="3" maxlength="30" pattern="[a-zA-Z0-9_]{3,30}"></div>
+        <div class="form-group"><label for="password">Password</label><input type="password" id="password" name="password" placeholder="Min 8 chars, mixed case + number" required autocomplete="new-password" minlength="8"></div>
+        <div class="form-group"><label for="confirm_password">Confirm password</label><input type="password" id="confirm_password" name="confirm_password" placeholder="Repeat password" required autocomplete="new-password" minlength="8"></div>
+        <button type="submit" name="register" class="btn btn-primary btn-full">Create account</button>
+    </form>
+    <div class="auth-footer">Already have an account? <a href="login.php">Login here</a></div>
+<?php render_foot(true, '../js/app.js'); ?>
