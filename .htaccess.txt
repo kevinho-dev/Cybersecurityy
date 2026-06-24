@@ -1,8 +1,0 @@
-RewriteEngine On
-
-# Stuur HTTP door naar HTTPS
-RewriteCond %{HTTPS} off
-RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-
-# Blokkeer directe toegang tot de uploads map
-RewriteRule ^uploads/ - [F,L]
